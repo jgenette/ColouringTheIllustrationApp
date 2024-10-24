@@ -1,0 +1,1330 @@
+---
+title: "Colouring the Illustration v.1.0."
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+    horizontal_layout: fill
+    theme: 
+      version: 5
+      bootswatch: spacelab
+runtime: shiny
+
+
+---
+
+```{r global, include=FALSE}
+library(shiny)
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(shinythemes)
+library(akima)
+library(tidyr)
+library(fields) # For thin plate spline interpolation
+# install.packages("ggrepel")
+library(ggrepel)
+library(grid)
+library(patchwork)
+
+fluidPage(theme = shinytheme("cerulean"))
+
+ipa_vowel_symbols <- tibble::tibble(
+  IPA = c("y", "i", "ɨ", "ʉ", "ɯ", "u", "I", "Y", "ʊ", "e", "ø", "ɘ", "ɵ", "ɤ", "o", 
+          "ə", "ɛ", "œ", "ɜ", "ɞ", "ʌ", "ɔ", "æ", "ɐ", "a", "Œ", "ɒ", "ɑ", "ỹ", "ĩ", 
+          "ɨ̃", "ʉ̃", "ɯ̃", "ũ", "Ī", "Ŷ", "ʊ̃", "ẽ", "ø̃", "ɘ̃", "ɵ̃", "ɤ̃", "õ", "ə̃", 
+          "ɛ̃", "œ̃", "ɜ̃", "ɞ̃", "ʌ̃", "ɔ̃", "æ̃", "ɐ̃", "ã", "Œ̃", "ɒ̃", "ɑ̃"),
+  Frontness = c(-0.6230004, -0.6230004, -0.12, -0.12, 0.377, 0.377, -0.287667, -0.287667, 0.207, 
+                -0.4553334, -0.4553334, -0.04, -0.04, 0.377, 0.377, 0, -0.287667, -0.287667, 0.045, 
+                0.045, 0.377, 0.377, -0.2038335, 0.079, -0.12, -0.12, 0.377, 0.377, 
+                -0.6230004, -0.6230004, -0.12, -0.12, 0.377, 0.377, -0.287667, -0.287667, 0.207, 
+                -0.4553334, -0.4553334, -0.04, -0.04, 0.377, 0.377, 0, -0.287667, -0.287667, 0.045, 
+                0.045, 0.377, 0.377, -0.2038335, 0.079, -0.12, -0.12, 0.377, 0.377),
+  Height = c(-0.476, -0.476, -0.476, -0.476, -0.476, -0.476, -0.3093333, -0.3093333, -0.3093333, 
+             -0.1426667, -0.1426667, -0.1426667, -0.1426667, -0.1426667, -0.1426667, 0, 0.1906666, 0.1906666, 0.1906666, 
+             0.1906666, 0.1906666, 0.1906666,  0.3573333,  0.3573333, 0.524, 0.524, 0.524, 0.524, -0.476, 
+             -0.476, -0.476, -0.476, -0.476, -0.476, -0.3093333, -0.3093333, -0.3093333, -0.1426667, 
+             -0.1426667, -0.1426667, -0.1426667, -0.1426667, -0.1426667, 0, 0.1906666, 0.1906666, 0.1906666, 0.1906666, 
+             0.1906666, 0.1906666,  0.3573333,  0.3573333, 0.524, 0.524, 0.524, 0.524),
+  Rounding = c("Rounded", "Unrounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Rounded", 
+               "Unrounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Unrounded", "Unrounded", "Rounded", "Rounded", "Unrounded", "Rounded", "Unrounded", 
+               "Rounded", "Unrounded", "Rounded", "Unrounded", "Unrounded", "Rounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Unrounded", 
+               "Rounded", "Unrounded", "Rounded", "Unrounded", "Rounded", "Unrounded", "Unrounded", "Rounded", "Rounded", "Rounded", "Unrounded"),
+  Nasality = c("Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", 
+               "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Oral", "Nasal", "Nasal", 
+               "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", 
+               "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal", "Nasal")
+)
+
+ipa_vowel_symbols <- ipa_vowel_symbols %>%
+  mutate(
+    Height_Level = case_when(
+      Height <= -0.476 ~ "Close",
+      Height <= -0.1426667 ~ "Close-mid",
+      Height == 0 ~ "Mid",
+      Height <= 0.1906666 ~ "Open-mid",
+      Height >=  0.3573333 ~ "Open"
+    ),
+    Backness_Level = case_when(
+      Frontness <= -0.287667 ~ "Front",
+      Frontness <=-0.287667 ~ "Central",
+      Frontness >= 0.377 ~ "Back"
+    )
+  )
+
+ipa_vowel_symbols_original <- ipa_vowel_symbols
+#ipa_vowel_symbols <- read_excel("/Users/jeremy-ua/Documents/Research/Data/Fréquence_phoneme-fr/vowel_chart_coordonates.xlsx") %>% select(IPA, `X-norm`, `Y-norm`) %>% rename(Frontness = `X-norm`, Height = `Y-norm`)
+
+# Create a list where each element is a list of features for each sound
+features_list <- list(
+  list(Symbol = "p", Place = "Bilabial", Manner = "Plosive", Voicing = "Voiceless"),
+  list(Symbol = "b", Place = "Bilabial", Manner = "Plosive", Voicing = "Voiced"),
+  list(Symbol = "m", Place = "Bilabial", Manner = "Nasal", Voicing = "Voiced"),
+  list(Symbol = "ʙ", Place = "Bilabial", Manner = "Trill", Voicing = "Voiced"),
+  list(Symbol = "ɸ", Place = "Bilabial", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "β", Place = "Bilabial", Manner = "Fricative", Voicing = "Voiced"),
+  
+  list(Symbol = "ɱ", Place = "Labiodental", Manner = "Nasal", Voicing = "Voiced"),  
+  list(Symbol = "ⱱ", Place = "Labiodental", Manner = "Tap or Flap", Voicing = "Voiced"),
+  list(Symbol = "f", Place = "Labiodental", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "v", Place = "Labiodental", Manner = "Fricative", Voicing = "Voiced"),
+
+  list(Symbol = "θ", Place = "Dental", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ð", Place = "Dental", Manner = "Fricative", Voicing = "Voiced"),
+
+  list(Symbol = "t", Place = "Alveolar", Manner = "Plosive", Voicing = "Voiceless"),
+  list(Symbol = "d", Place = "Alveolar", Manner = "Plosive", Voicing = "Voiced"),
+  list(Symbol = "n", Place = "Alveolar", Manner = "Nasal", Voicing = "Voiced"),
+  list(Symbol = "r", Place = "Alveolar", Manner = "Trill", Voicing = "Voiced"),
+  list(Symbol = "ɾ", Place = "Alveolar", Manner = "Tap or Flap", Voicing = "Voiced"),
+  list(Symbol = "s", Place = "Alveolar", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "z", Place = "Alveolar", Manner = "Fricative", Voicing = "Voiced"),
+  list(Symbol = "ɹ", Place = "Alveolar", Manner = "Approximant", Voicing = "Voiced"),
+  list(Symbol = "l", Place = "Alveolar", Manner = "Lateral Approximant", Voicing = "Voiced"),
+
+  list(Symbol = "ʃ", Place = "Postalveolar", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ʒ", Place = "Postalveolar", Manner = "Fricative", Voicing = "Voiced"),
+  list(Symbol = "ɬ", Place = "Postalveolar", Manner = "Lateral Fricative", Voicing = "Voiceless"),
+ 
+  list(Symbol = "ʈ", Place = "Retroflex", Manner = "Plosive", Voicing = "Voiceless"),
+  list(Symbol = "ɖ", Place = "Retroflex", Manner = "Plosive", Voicing = "Voiced"),
+  list(Symbol = "ɳ", Place = "Retroflex", Manner = "Nasal", Voicing = "Voiced"),
+  list(Symbol = "ʂ", Place = "Retroflex", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ʐ", Place = "Retroflex", Manner = "Fricative", Voicing = "Voiced"),
+  list(Symbol = "ɻ", Place = "Retroflex", Manner = "Approximant", Voicing = "Voiced"),
+  list(Symbol = "ɭ", Place = "Retroflex", Manner = "Lateral Approximant", Voicing = "Voiced"),
+  
+  list(Symbol = "c", Place = "Palatal", Manner = "Plosive", Voicing = "Voiceless"),
+  list(Symbol = "ɟ", Place = "Palatal", Manner = "Plosive", Voicing = "Voiced"),
+  list(Symbol = "ɲ", Place = "Palatal", Manner = "Nasal", Voicing = "Voiced"),
+  list(Symbol = "ç", Place = "Palatal", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ʝ", Place = "Palatal", Manner = "Fricative", Voicing = "Voiced"),
+  list(Symbol = "j", Place = "Palatal", Manner = "Approximant", Voicing = "Voiced"),
+  list(Symbol = "ʎ", Place = "Palatal", Manner = "Lateral Approximant", Voicing = "Voiced"),
+  
+  list(Symbol = "k", Place = "Velar", Manner = "Plosive", Voicing = "Voiceless"),
+  list(Symbol = "g", Place = "Velar", Manner = "Plosive", Voicing = "Voiced"),
+  list(Symbol = "ŋ", Place = "Velar", Manner = "Nasal", Voicing = "Voiced"),
+  list(Symbol = "x", Place = "Velar", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ɣ", Place = "Velar", Manner = "Fricative", Voicing = "Voiced"),
+  list(Symbol = "ɰ", Place = "Velar", Manner = "Approximant", Voicing = "Voiced"),
+  list(Symbol = "ʟ", Place = "Velar", Manner = "Lateral Approximant", Voicing = "Voiced"),
+  
+  list(Symbol = "q", Place = "Uvular", Manner = "Plosive", Voicing = "Voiceless"),
+  list(Symbol = "ɢ", Place = "Uvular", Manner = "Plosive", Voicing = "Voiced"),
+  list(Symbol = "ɴ", Place = "Uvular", Manner = "Nasal", Voicing = "Voiced"),
+  list(Symbol = "ʀ", Place = "Uvular", Manner = "Trill", Voicing = "Voiced"),
+  list(Symbol = "χ", Place = "Uvular", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ʁ", Place = "Uvular", Manner = "Fricative", Voicing = "Voiced"),
+  
+  list(Symbol = "ħ", Place = "Pharyngeal", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ʕ", Place = "Pharyngeal", Manner = "Fricative", Voicing = "Voiced"),
+  
+  list(Symbol = "ʔ", Place = "Glottal", Manner = "Plosive", Voicing = "Voiceless"),
+  list(Symbol = "h", Place = "Glottal", Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ɦ", Place = "Glottal", Manner = "Fricative", Voicing = "Voiced"),
+  
+  list(Symbol = "ɺ", Place ="Alveolar" , Manner = "Lateral Flap", Voicing = "Voiced"),
+  
+  list(Symbol = "w", Place ="Labial-Velar" , Manner = "Approximant", Voicing = "Voiced"),
+  list(Symbol = "ɥ", Place ="Labial-Palatal" , Manner = "Approximant", Voicing = "Voiced"),
+  list(Symbol = "ʍ", Place ="Labial-Velar" , Manner = "Fricative", Voicing = "Voiceless"),
+  
+  list(Symbol = "ʜ", Place ="Epiglottal" , Manner = "Fricative", Voicing = "Voiceless"),
+  list(Symbol = "ʢ", Place ="Epiglottal" , Manner = "Fricative", Voicing = "Voiced"),
+  list(Symbol = "ʡ", Place ="Epiglottal" , Manner = "Plosive", Voicing = "Voiceless"),
+  
+  list(Symbol = "ʑ", Place ="Alveolo-Palatal" , Manner = "Fricative", Voicing = "Voiced"),
+  list(Symbol = "ɕ", Place ="Alveolo-Palatal" , Manner = "Fricative", Voicing = "Voiceless")
+)
+
+# Convert the list to a data frame
+ipa_consonant_symbols <- do.call(rbind, lapply(features_list, as.data.frame))
+
+ipa_grid <- ipa_consonant_symbols %>%
+  mutate(x = factor(Place, levels = c("Bilabial", "Labiodental", "Dental", "Alveolar", 
+                                      "Postalveolar", "Retroflex", "Palatal", "Velar", 
+                                      "Uvular", "Pharyngeal", "Glottal", "", "Labial-Velar", "Labial-Palatal", "Alveolo-Palatal", "Epiglottal")),
+         y = factor(Manner, levels = c("Lateral Flap", "Lateral Approximant", "Approximant", "Lateral Fricative", "Fricative", "Affricate", "Tap or Flap", "Trill", "Nasal", "Plosive")),
+         hjust = ifelse(Voicing == "Voiceless", 1.2, -0.2))
+
+features_list_non_pulmonic <- list(
+  list(Symbol = "ʘ", Place = "Bilabial", Manner = "Click"),
+  list(Symbol = "ǀ", Place = "Dental", Manner = "Click"),
+  list(Symbol = "ǃ", Place = "(Post)alveolar", Manner = "Click"),
+  list(Symbol = "ǂ", Place = "Palato-Alveolar", Manner = "Click"),
+  list(Symbol = "ǁ", Place = "Alveolar-Lateral", Manner = "Click"),
+  
+  list(Symbol = "ɓ", Place = "Bilabial", Manner = "Implosive"),
+  list(Symbol = "ɗ", Place = "Dental-Alveolar", Manner = "Implosive"),
+  list(Symbol = "ʄ", Place = "Palatal", Manner = "Implosive"),
+  list(Symbol = "ɠ", Place = "Velar", Manner = "Implosive"),
+  list(Symbol = "ʛ", Place = "Uvular", Manner = "Implosive"),
+  
+  list(Symbol = "pʼ", Place = "Bilabial", Manner = "Ejective"),
+  list(Symbol = "tʼ", Place = "Dental-Alveolar", Manner = "Ejective"),
+  list(Symbol = "kʼ", Place = "Velar", Manner = "Ejective"),
+  list(Symbol = "sʼ", Place = "Alveolar Fricative", Manner = "Ejective")
+)
+# Convert the list to a data frame
+ipa_consonant_other_symbols  <- do.call(rbind, lapply(features_list_non_pulmonic, as.data.frame))
+
+ipa_grid_other <- ipa_consonant_other_symbols %>%
+  mutate(x = factor(Place, levels = c("Bilabial",  "Dental", "Dental-Alveolar", "Alveolar", "Alveolar Fricative", "Alveolar-Lateral", "(Post)alveolar", "Palato-Alveolar","Palatal",  "Velar", "Uvular")),
+         y = factor(Manner, levels = c("Click", "Implosive", "Ejective")))
+
+ipa_oral_vowel_symbols <- ipa_vowel_symbols %>% 
+  filter(Nasality== "Oral")
+ipa_nasal_vowel_symbols <- ipa_vowel_symbols %>% 
+  filter(Nasality== "Nasal")
+
+
+##
+# Create a list of unique manners
+consonant_types <- unique(ipa_consonant_symbols$Manner)
+
+# Create a named list of data frames, one for each consonant type
+consonant_tables <- lapply(consonant_types, function(manner) {
+  ipa_consonant_symbols %>%
+    filter(Manner == manner)
+})
+
+# Set names for the list based on the manner of articulation
+names(consonant_tables) <- consonant_types
+# Create separate variables for each consonant type
+for (manner in consonant_types) {
+  assign(paste0("ipa_", gsub(" ", "_", tolower(manner)), "_symbols"), 
+         ipa_consonant_symbols %>% filter(Manner == manner))
+}
+
+
+##
+# Create a list of unique manners
+consonant_other_types <- unique(ipa_consonant_other_symbols$Manner)
+
+# Create a named list of data frames, one for each consonant type
+consonant_other_tables <- lapply(consonant_other_types, function(manner) {
+  ipa_consonant_other_symbols %>%
+    filter(Manner == manner)
+})
+
+# Set names for the list based on the manner of articulation
+names(consonant_other_tables) <- consonant_other_types
+# Create separate variables for each consonant type
+for (manner in consonant_other_types) {
+  assign(paste0("ipa_", gsub(" ", "_", tolower(manner)), "_symbols"), 
+         ipa_consonant_other_symbols %>% filter(Manner == manner))
+}
+```
+
+
+# Home 
+
+## Row {data-height=250 .tabset .tabset-fade}
+
+-----------------------------
+
+### Welcome to **ColouringTheIllustration** 🎨
+
+Traditional phonological documentation often relies on (adapted versions of) the **IPA** chart, which offers a static, one-dimensional view of phonological systems without highlighting the **relative frequency of phonemes**. At the same time, the growing availability of phonologically transcribed spoken corpora provides valuable data on these frequencies. However, until now, there hasn't been an easy way to visualize frequency information on the IPA chart.
+
+**ColouringTheIllustration** bridges this gap by allowing users to enhance phonological system documentation through **interactive data visualizations**. With this app, you can visualize phoneme frequencies from any corpus that represents a phonological system. Simply input the counts of each observed phoneme, and watch as the app transforms your data into insightful visual representations.
+
+
+### How to use the app 📏
+
+<div style="height: 200px; overflow-y: scroll;"> 
+
+1. Enter the **counts** or **frequencies** for each phoneme using the options below ⬇️<sup>1</sup>  
+2. Customize the appearance by selecting **design options** in the last tab 🧑‍🎨  
+3. View the **visuals** by choosing one of the green tabs above ⬆️<sup>2</sup>  
+4. Use the **filter** options available in each tab to refine your visualization ☑️  
+5. To save or copy your visuals, simply right-click and select the appropriate option 💾  
+
+**Or**
+
+The code is also publicly available on GitHub [here](https://github.com/jgenette/ColouringTheIllustrationApp)
+
+<sup>1</sup> *You can either fill in the counts manually or use the drop-down menu, but not both at the same time.*  
+<sup>2</sup> *Please allow a few seconds for the visualizations to load.* ⏳  
+</div> 
+
+### How to cite the app 📚
+
+Improving **ColouringTheIllustration** requires time. If you use it for publications, consider citing it.
+
+You can refer to it as:
+Genette, J., Gillis, S., & Verhoeven, J. (2024). Colouring the Illustration v.1.0. [Software]. *Zenodo*. https://doi.org/10.5281/zenodo.10228174
+
+### Bug Reports and Feedback 🫤
+
+If you encounter any issues or have suggestions, I'd love to hear from you! You can file an issue on GitHub [here](https://github.com/jgenette/ColouringTheIllustrationApp) or reach out via email at jeremy.genette@uantwerpen.be.
+
+## Row {data-height=300px .tabset .tabset-fade}
+
+### Vowel  
+<div style="height: 200px; overflow-y: scroll;"> 
+```{r}
+#Define UI elements dynamically
+generate_vowel_inputs <- function(vowel_symbols) {
+  do.call(tagList, lapply(vowel_symbols$IPA, function(IPA) {
+    tags$div(style = "display: flex; justify-content: flex-start; align-items: center;",
+      tags$span(paste0("/", IPA, "/"), style = "margin-right: 10px; flex-shrink: 0; line-height: 30px;"), # Adjust line-height as needed
+      numericInput(inputId = IPA, label = NULL, value = 0, min = 0, width = "250px") # Adjust width as needed
+    )
+  }))
+}
+# Dropdown to select vowel type
+  tags$div(style = "display: flex; justify-content: flex-start; align-items: center;",
+    tags$label("Select a vowel type:", style = "margin-right: 10px;"),
+    selectInput(inputId = "vowel_type", label = "",
+                choices = c("Select an option", "Oral Vowels", "Nasal Vowels"),
+                selected = "Select an option"))
+
+# Dynamic UI for vowel inputs
+ uiOutput("vowel_inputs")
+
+# Server logic to render dynamic UI
+output$vowel_inputs <- renderUI({
+  vowel_type <- input$vowel_type
+  
+  # Select appropriate vowel symbols based on user input
+  vowel_symbols <- if (vowel_type == "Select an option"){
+    ipa_vowel_symbols_original
+  } else if (vowel_type == "Nasal Vowels"){
+    ipa_nasal_vowel_symbols
+   } else if (vowel_type == "Oral Vowels") {
+    ipa_oral_vowel_symbols 
+  }
+
+  # Generate dynamic inputs
+  generate_vowel_inputs(vowel_symbols)
+})
+
+
+```
+</div> 
+### Diphtongs
+<div style="height: 200px; overflow-y: scroll;"> 
+This component still needs to be implemented 🏗
+</div> 
+### Pulmonic Consonants
+<div style="height: 200px; overflow-y: scroll;"> 
+```{r}
+# Define UI elements dynamically
+generate_consonant_inputs <- function(consonant_symbols) {
+  do.call(tagList, lapply(consonant_symbols$Symbol, function(Symbol) {
+    tags$div(style = "display: flex; justify-content: flex-start; align-items: center;",
+      tags$span(paste0("/", Symbol, "/"), style = "margin-right: 10px; flex-shrink: 0; line-height: 30px;"), # Adjust line-height as needed
+      numericInput(inputId = Symbol, label = NULL, value = 0, min = 0, width = "250px") # Adjust width as needed
+    )
+  }))
+}
+
+# Dropdown to select consonant type
+tags$div(style = "display: flex; justify-content: flex-start; align-items: center;",
+    tags$label("Select a consonant type:", style = "margin-right: 10px;"),
+selectInput(inputId = "consonant_type", label = "", choices =c("Approximant" 
+,"Fricative"  , "Lateral Approximant","Lateral Flap"       
+, "Lateral Fricative", "Nasal" ,"Plosive"  ,"Tap or Flap"  ,"Trill", "Select an option"), selected = "Select an option" ))
+
+# Dynamic UI for consonant inputs
+uiOutput("consonant_inputs")
+
+output$consonant_inputs <- renderUI({
+  consonant_type <- input$consonant_type
+  
+# Select appropriate consonant symbols based on user input
+consonant_symbols <- if (consonant_type == "Approximant") {
+  ipa_approximant_symbols
+} else if (consonant_type == "Fricative") {
+  ipa_fricative_symbols
+} else if (consonant_type == "Lateral Approximant") {
+  ipa_lateral_approximant_symbols
+} else if (consonant_type == "Lateral Flap") {
+  ipa_lateral_flap_symbols
+} else if (consonant_type == "Lateral Fricative") {
+  ipa_lateral_fricative_symbols
+} else if (consonant_type == "Nasal") {
+  ipa_nasal_symbols
+} else if (consonant_type == "Plosive") {
+  ipa_plosive_symbols
+} else if (consonant_type == "Tap or Flap") {
+  ipa_tap_or_flap_symbols
+} else if (consonant_type == "Trill") {
+  ipa_trill_symbols
+} else if (consonant_type == "Select an option"){
+    ipa_consonant_symbols
+  }
+
+  # Generate dynamic inputs
+  generate_consonant_inputs(consonant_symbols)
+})
+
+
+```
+ </div>
+### Non-Pulmonic Consonants
+<div style="height: 200px; overflow-y: scroll;"> 
+```{r}
+
+# Define UI elements dynamically
+generate_consonant_other_inputs <- function(consonant_other_symbols) {
+  do.call(tagList, lapply(consonant_other_symbols$Symbol, function(Symbol) {
+    tags$div(style = "display: flex; justify-content: flex-start; align-items: center;",
+      tags$span(paste0("/", Symbol, "/"), style = "margin-right: 10px; flex-shrink: 0; line-height: 30px;"), # Adjust line-height as needed
+      numericInput(inputId = Symbol, label = NULL, value = 0, min = 0, width = "250px") # Adjust width as needed
+    )
+  }))
+}
+
+# Dropdown to select consonant type
+  tags$div(style = "display: flex; justify-content: flex-start; align-items: center;",
+    tags$label("Select a consonant type:", style = "margin-right: 10px;"),
+selectInput(inputId = "consonant_other_type", label = "", choices =c("Click", "Ejective", "Implosive", "Select an option"), selected = "Select an option"  ))
+
+# Dynamic UI for consonant inputs
+uiOutput("consonant_other_inputs")
+
+output$consonant_other_inputs <- renderUI({
+  consonant_other_type <- input$consonant_other_type
+  
+# Select appropriate consonant symbols based on user input
+consonant_other_symbols <- if (consonant_other_type == "Select an option"){
+    ipa_consonant_other_symbols
+  } else if (consonant_other_type == "Click") {
+  ipa_click_symbols
+} else if (consonant_other_type == "Implosive") {
+  ipa_implosive_symbols
+} else if (consonant_other_type == "Ejective") {
+  ipa_ejective_symbols
+} 
+
+  # Generate dynamic inputs
+  generate_consonant_other_inputs(consonant_other_symbols)
+})
+
+```
+</div>
+
+### Design options
+<div style="height: 200px; overflow-y: scroll;"> 
+```{r}
+
+# Input fields for sidebar
+textInput(inputId = "ID_syst", label = "Phonological system:", value = "French")
+textInput(inputId = "ID_data", label = "Data source:", value = "JIPA")
+
+checkboxInput(inputId = "Log_scale", label = "Logarithmic scale", value = FALSE, width = NULL)
+
+textInput(inputId = "low_f_col", label = "Insert the hex code of the colour for low frequency phonemes:", value = "#A020F0", width = NULL, placeholder = NULL)
+
+textInput(inputId = "high_f_col", label = "Insert the hex code of the colour for high frequency phonemes:", value = "#EF33B1", width = NULL, placeholder = NULL)
+```
+ </div>
+
+# Vowels
+
+## Sidebar {.sidebar}
+
+```{r}
+
+selectInput(inputId = "vowel_height_filter", label = "Filter by vowel height:",
+            choices = c("Close", "Close-mid", "Open-mid", "Open", "Mid", "No filter"),
+            selected = "No filter")
+
+selectInput(inputId = "vowel_backness_filter", label = "Filter by vowel place of articulation:",
+            choices = c("Front", "Central", "Back", "No filter"),
+            selected = "No filter")
+
+selectInput(inputId = "vowel_nasality_filter", label = "Filter by vowel nasality:",
+            choices = c("Oral", "Nasal", "No filter"),
+            selected = "No filter")
+
+selectInput(inputId = "vowel_rounding_filter", label = "Filter by vowel rounding:",
+            choices = c("Unrounded", "Rounded", "No filter"),
+            selected = "No filter")
+```
+
+## Row
+
+```{r}
+renderPlot({
+  # 1. Get the values for each IPA from the input
+  # When a vowel type filter is applied
+  ipa_values <- sapply(ipa_vowel_symbols$IPA, function(IPA) {
+    # Retrieve value from input corresponding to each IPA symbol
+    input[[IPA]]
+  })
+
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+  # 2. Initialize and update the 'value' column in 'ipa_vowel_symbols' dataframe
+  ipa_vowel_symbols$value <- rep(1, 56) # Initially set all values to 1
+  
+  ipa_vowel_symbols$value <- ipa_values # Update values based on the input
+  
+  filtered_data <- ipa_vowel_symbols
+    
+if (input$vowel_height_filter != "No filter") {
+      filtered_data <- filtered_data %>%
+        filter(Height_Level == input$vowel_height_filter)
+    }
+    
+    if (input$vowel_backness_filter != "No filter") {
+      filtered_data <- filtered_data %>%
+        filter(Backness_Level == input$vowel_backness_filter)
+    }
+    
+    if (input$vowel_nasality_filter != "No filter") {
+      filtered_data <- filtered_data %>%
+        filter(Nasality == input$vowel_nasality_filter)
+    }
+    
+    if (input$vowel_rounding_filter != "No filter") {
+      filtered_data <- filtered_data %>%
+        filter(Rounding == input$vowel_rounding_filter)
+    }
+    
+  ipa_vowel_symbols <- filtered_data
+  
+  labels_selected <- ipa_vowel_symbols$IPA[ipa_vowel_symbols$value>1e-6] 
+  # 3. Process 'ipa_vowel_symbols' for further analysis
+  ipa_vowel_symbols <- ipa_vowel_symbols %>%
+    group_by(Height, Frontness) %>%
+    mutate(value = sum(value),  # Compute log of the sum of 'value' for each group
+           pasted_labels = paste0(IPA, collapse = "_")) %>%  # Create a concatenated label
+    rename(xi = Frontness, yi = Height) %>%  # Rename columns for clarity
+    mutate(xi = round(xi, 1), yi = round(yi, 1)) %>% 
+    ungroup() %>%
+    group_by(xi, yi) %>%
+    summarize(value = first(value),  # Take the first 'value' for each (x, y) pair
+              IPA = first(IPA),  # Take the first 'IPA' for each (x, y) pair
+              pasted_labels = first(pasted_labels),# Take the first 'pasted_labels' for each (x, y) pair
+              .groups = 'drop')
+  
+  
+  if (input$Log_scale == F){
+  # 5. Interpolate the data
+  
+  interp_result <- interp(x = ipa_vowel_symbols$xi, y = ipa_vowel_symbols$yi, z = ipa_vowel_symbols$value ,
+                          xo = seq(min(ipa_vowel_symbols$xi), max(ipa_vowel_symbols$xi), length = 1000),
+                          yo = seq(min(ipa_vowel_symbols$yi), max(ipa_vowel_symbols$yi), length = 1000),
+                          extrap = FALSE)
+  } else {  interp_result <- interp(x = ipa_vowel_symbols$xi, y = ipa_vowel_symbols$yi, z = log(ipa_vowel_symbols$value + 1e-6) ,
+                          xo = seq(min(ipa_vowel_symbols$xi), max(ipa_vowel_symbols$xi), length = 1000),
+                          yo = seq(min(ipa_vowel_symbols$yi), max(ipa_vowel_symbols$yi), length = 1000),
+                          extrap = FALSE)}
+  
+  # 7. Create data frame for ggplot without labels
+  interp_df <- expand.grid(xi = interp_result$x, yi = interp_result$y)
+  interp_df$z <- as.vector(interp_result$z)
+  
+# interp_df<- left_join(interp_df, ipa_vowel_symbols, by = c("xi", "yi"))
+  
+  
+  ipa_vowel_symbols <- ipa_vowel_symbols_original %>% ungroup %>% rename(xi = Frontness, yi = Height) %>% ungroup() %>% filter(IPA %in% labels_selected) 
+  # Separate rounded and unrounded vowels
+ipa_vowel_symbols <- ipa_vowel_symbols %>%
+  mutate(adjusted_xi = case_when(
+    Rounding == "Rounded" & Nasality == "Nasal" ~ xi + 0.004,
+    Rounding == "Rounded" & Nasality != "Nasal" ~ xi + 0.002,
+    Rounding != "Rounded" & Nasality == "Nasal" ~ xi + 0.003,
+    TRUE ~ xi
+  ))
+  
+  # 9. Plot using ggplot2
+chart<- ggplot() +
+    geom_tile(data = interp_df, aes(x = xi, y = -yi, fill = z), color = NA) +  # Tile plot with interpolated data
+    scale_fill_gradient(low = input$low_f_col, high = input$high_f_col, na.value = "white", breaks = c(min(interp_df$z, na.rm = TRUE), 
+                                 max(interp_df$z, na.rm = TRUE)), labels=c("Least \nfrequent","Most \nfrequent")) +  # Set color gradient
+    theme_minimal() +
+    theme(
+      axis.text = element_blank(),  # Remove axis text
+      axis.title = element_blank(),  # Remove axis titles
+      axis.ticks = element_blank(),  # Remove axis ticks
+      panel.grid.major = element_blank(),  # Remove major grid lines
+      panel.grid.minor = element_blank()   # Remove minor grid lines
+    ) +
+   coord_fixed(ratio = 1) +  # Ensure the aspect ratio is fixed
+  labs(fill = "Frequency\n") +  # Add legend title
+  geom_text_repel(data = ipa_vowel_symbols,  # Add labels from the filteorange data
+                  aes(x = adjusted_xi, y = -yi, label = IPA),
+                  color = "black", size = 5, box.padding = 0.5, point.padding = 0.5,
+                  segment.color = NA, direction = "x") 
+
+summary_rounding <- ipa_vowel_symbols_original %>% rename(xi = Frontness, yi = Height) %>% ungroup() 
+#summary_rounding$value <- runif(56) # Update values based on the input
+# Filter by selected labels and summarize the data
+
+if (exists("labels_selected") && length(labels_selected) > 0) {
+  summary_rounding$value <- ipa_values
+  
+  summary_rounding <- summary_rounding %>%
+    filter(IPA %in% labels_selected) %>%
+    group_by(Rounding) %>%
+    summarise(total_value = sum(value))
+  
+  
+# Calculate proportions
+total_sum <- sum(summary_rounding$total_value)  # Total sum of all values
+summary_rounding <- summary_rounding %>%
+  group_by(Rounding) %>%
+  mutate(proportion = total_value / total_sum)  # Change level names
+# Create the basic plot
+rounding <- ggplot(summary_rounding, aes(x = "", y = proportion, fill = Rounding)) + 
+  geom_col(position = "fill") +  # Create a stacked bar plot with proportional heights
+  geom_text(
+    aes(label = paste0(Rounding, " ", scales::percent(proportion))), 
+    position = position_fill(vjust = 0.5),  # Center text vertically in each bar
+    color = "white", size = 5  # Adjust text color and size
+  ) +
+  scale_fill_manual(values = c("Rounded" = input$high_f_col, "Unrounded" = input$low_f_col)) +  # Set custom colors
+  theme_minimal() +  # Apply a minimal theme
+  theme(
+    legend.position = "none",  # Remove the legend
+    axis.text = element_blank(),  # Remove axis text
+    axis.title = element_blank(),  # Remove axis titles
+    axis.ticks = element_blank(),  # Remove axis ticks
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  ) +
+  coord_flip()  # Flip coordinates to make bars horizontal
+  # Sum the values for each Rounding category
+  ipa_vowel_symbols <- ipa_vowel_symbols_original %>% rename(xi = Frontness, yi = Height) %>% ungroup() %>% filter(IPA %in% labels_selected) 
+  
+  # Separate rounded and unrounded vowels
+ipa_vowel_symbols <- ipa_vowel_symbols %>%
+  mutate(adjusted_xi = ifelse(Rounding == "T", xi + 0.001, xi))
+  
+
+  
+summary_Nasality <- ipa_vowel_symbols_original %>% rename(xi = Frontness, yi = Height) %>% ungroup() 
+  #summary_Nasality$value <- runif(56) # Update values based on the input
+summary_Nasality$value <- ipa_values
+  summary_Nasality <- summary_Nasality %>%
+    filter(IPA %in% labels_selected) %>%
+    group_by(Nasality) %>%
+    summarise(total_value = sum(value))
+  
+  
+# Calculate proportions
+total_sum <- sum(summary_Nasality$total_value)  # Total sum of all values
+summary_Nasality <- summary_Nasality %>%
+  group_by(Nasality) %>%
+  mutate(proportion = total_value / total_sum)  # Change level names
+
+
+# Create the basic plot
+Nasality <- ggplot(summary_Nasality, aes(x = "", y = proportion, fill = Nasality)) + 
+  geom_col(position = "fill") +  # Create a stacked bar plot with proportional heights
+  geom_text(
+    aes(label = paste0(Nasality, " ", scales::percent(proportion)), size = proportion), 
+    position = position_fill(vjust = 0.5),  # Center text vertically in each bar
+    color = "white"  # Adjust text color
+  ) +
+  scale_fill_manual(values = c("Nasal" = input$high_f_col, "Oral" = input$low_f_col)) +  # Set custom colors
+  scale_size_continuous(range = c(3, 6)) +  # Adjust the range of text size based on proportion
+  theme_minimal() +  # Apply a minimal theme
+  theme(
+    legend.position = "none",  # Remove the legend
+    axis.text = element_blank(),  # Remove axis text
+    axis.title = element_blank(),  # Remove axis titles
+    axis.ticks = element_blank(),  # Remove axis ticks
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  ) +
+  coord_flip()  # Flip coordinates to make bars horizontal
+
+
+combined_plot <- chart| (rounding/Nasality)  
+combined_plot <-combined_plot +
+  plot_annotation(
+    title = paste('Vowel system of', ID_syst),
+    theme = theme(plot.title = element_text(size = 18)),
+    caption = paste("© A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+  ) 
+combined_plot
+}else {
+ plot.new()
+} 
+})
+```
+
+# Pulmonic Consonants
+
+## Sidebar {.sidebar}
+
+```{r}
+selectInput(inputId = "consonant_place_filter", label = "Filter by consonant place of articulation:",
+            choices = c("Bilabial", "Labiodental", "Dental", "Alveolar", 
+                                      "Postalveolar", "Retroflex", "Palatal", "Velar", 
+                                      "Uvular", "Pharyngeal", "Glottal", "", "Labial-Velar",
+                        "Labial-Palatal", "Alveolo-Palatal", "Epiglottal", "No filter"),
+            selected = "No filter")
+
+selectInput(inputId = "consonant_manner_filter", label = "Filter by consonant manner of articulation:",
+            choices = c("Lateral Flap", "Lateral Approximant", "Approximant", "Lateral Fricative", "Fricative", "Affricate", "Tap or Flap", "Trill", "Nasal", "Plosive", "No filter"),
+            selected = "No filter")
+
+selectInput(inputId = "consonant_voicing_filter", label = "Filter by consonant voicing:",
+            choices = c("Voiced", "Voiceless", "No filter"),
+            selected = "No filter")
+```
+
+## Row {.tabset .tabset-fade}
+### General chart
+
+```{r}
+
+renderPlot({
+  # 1. Get the values for each Symbol from the input
+  Symbol_cons <- sapply(ipa_grid$Symbol, function(Symbol) input[[Symbol]])
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+ipa_grid$value <- rep(1, 65)
+# Update values based on the input
+
+ipa_grid$value <- Symbol_cons
+
+
+cons_selected <- ipa_grid$Symbol[ipa_grid$value>1e-6]
+
+
+# Initialize the filtered data frame as the original data frame
+filtered_ipa_grid <- ipa_grid
+
+# Apply filters if they are not set to "No filter"
+if (input$consonant_place_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Place == input$consonant_place_filter)
+}
+
+if (input$consonant_manner_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Manner == input$consonant_manner_filter)
+}
+
+if (input$consonant_voicing_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Voicing == input$consonant_voicing_filter)
+}
+
+# Group by Place and Manner, then calculate the total value for each group
+if (input$Log_scale == F)
+{
+ipa_grid_detail<- filtered_ipa_grid %>%
+  group_by(Place, Manner) %>%
+  mutate(total_value = sum(value))
+}
+  else{
+  ipa_grid_detail<- filtered_ipa_grid %>%
+  group_by(Place, Manner) %>%
+  mutate(total_value = log(sum(value)+1e-6))}
+
+
+plot_detail <- ggplot(data = ipa_grid_detail) +
+  geom_tile(aes(x = x, y = y, fill = total_value), color = "white") +
+scale_fill_gradient(low = input$low_f_col, high = input$high_f_col, na.value = "white", breaks = c(min(ipa_grid_detail$total_value, na.rm = TRUE), max(ipa_grid_detail$total_value, na.rm = TRUE)), labels = c("Least \nfrequent", "Most \nfrequent")
+                     )+
+  geom_text(data = ipa_grid_detail %>% filter(Symbol %in% cons_selected),
+            aes(x = x, y = y, label = Symbol, hjust = hjust), 
+            size = 5, family = "Geneva") +
+  theme_minimal() +
+  labs(y = "", fill = "Frequency\n\n") +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),  # Remove x-axis title
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "gray"),
+        axis.text.x = element_text(size = 10, angle = 45, vjust = 1, hjust = 1),  # Size of x-axis tick labels
+        axis.text.y = element_text(size = 10, angle = 0)) +
+  theme(text = element_text(family = "Geneva")) 
+
+plot_detail
+
+
+cons_plot <- plot_detail +  plot_annotation(
+    title = paste('Consonant system of', ID_syst),
+    theme = theme(
+      plot.title = element_text(size = 18),
+      plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
+    ),
+    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from"
+                    ,ID_data
+                    )
+  )
+cons_plot
+
+})  
+```
+
+## Row {.tabset .tabset-fade}
+
+### Place
+
+```{r}
+
+renderPlot({
+  # 1. Get the values for each Symbol from the input
+  Symbol_cons <- sapply(ipa_consonant_symbols$Symbol, function(Symbol) input[[Symbol]])
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+#ipa_grid$value <- sample(c(rep(1, (num_ones <- sample(2:3, 1))), rep(0, 57 - num_ones)))
+# Update values based on the input
+ipa_grid$value <- Symbol_cons
+
+cons_selected <- ipa_grid$Symbol[ipa_grid$value>1e-6]
+# Filter by selected conss and summarize the data
+# Initialize the filtered data frame as the original data frame
+filtered_ipa_grid <- ipa_grid
+
+# Apply filters if they are not set to "No filter"
+if (input$consonant_place_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Place == input$consonant_place_filter)
+}
+
+if (input$consonant_manner_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Manner == input$consonant_manner_filter)
+}
+
+if (input$consonant_voicing_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Voicing == input$consonant_voicing_filter)
+}
+
+ipa_grid <- filtered_ipa_grid
+# Group by Place and Manner, then calculate the total value for each group
+if (input$Log_scale == F)
+{
+ipa_grid_place<- filtered_ipa_grid %>%
+  group_by(Place) %>%
+  mutate(total_value = sum(value))
+}
+  else{
+  ipa_grid_place<- filtered_ipa_grid %>%
+  group_by(Place) %>%
+  mutate(total_value = log(sum(value)+1e-6))}
+
+
+plot_place <- ggplot(data = ipa_grid_place) +
+  geom_tile(aes(x = x, y = y, fill = total_value), color = "white") +
+  scale_fill_gradient(low = input$low_f_col, high = input$high_f_col, na.value = "white", breaks = c(min(ipa_grid_place$total_value), 
+          max(ipa_grid_place$total_value)), labels=c("Least \nfrequent","Most \nfrequent"))+
+  geom_text(data = ipa_grid_place %>% filter(Symbol %in% cons_selected),
+            aes(x = x, y = y, label = Symbol, hjust = hjust), 
+            size = 5) +
+  theme_minimal() +
+  labs(title = "...as a function of place of articulation",
+       x = "", y = "", fill = "Frequency\n\n") +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),  # Remove x-axis title
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "gray"),
+        axis.text.x = element_text(size = 10, angle = 45, vjust = 1, hjust = 1),  # Size of x-axis tick labels
+        axis.text.y = element_text(size = 10, angle = 0))  # Size of y-axis tick labels
+
+
+plot_place
+
+cons_plot <- plot_place +  plot_annotation(
+    title = paste('Consonant system of', ID_syst),
+    theme = theme(
+      plot.title = element_text(size = 18),
+      plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
+    ),
+    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+  )
+cons_plot
+
+})  
+```
+
+### Manner
+
+```{r}
+renderPlot({
+  # 1. Get the values for each Symbol from the input
+  Symbol_cons <- sapply(ipa_consonant_symbols$Symbol, function(Symbol) input[[Symbol]])
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+#ipa_grid$value <- sample(c(rep(1, (num_ones <- sample(2:3, 1))), rep(0, 57 - num_ones)))
+# Update values based on the input
+
+ipa_grid$value <- Symbol_cons
+
+
+cons_selected <- ipa_grid$Symbol[ipa_grid$value>1e-6]
+# Filter by selected conss and summarize the data
+# Filter by selected conss and summarize the data
+
+# Initialize the filtered data frame as the original data frame
+filtered_ipa_grid <- ipa_grid
+
+# Apply filters if they are not set to "No filter"
+if (input$consonant_place_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Place == input$consonant_place_filter)
+}
+
+if (input$consonant_manner_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Manner == input$consonant_manner_filter)
+}
+
+if (input$consonant_voicing_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Voicing == input$consonant_voicing_filter)
+}
+
+# Group by Place and Manner, then calculate the total value for each group
+if (input$Log_scale == F)
+{
+ipa_grid_Manner<- filtered_ipa_grid %>%
+  group_by( Manner) %>%
+  mutate(total_value = sum(value))
+}
+  else{
+  ipa_grid_Manner<- filtered_ipa_grid %>%
+  group_by( Manner) %>%
+  mutate(total_value = log(sum(value)+1e-6))}
+
+plot_Manner <- ggplot(data = ipa_grid_Manner) +
+  geom_tile(aes(x = x, y = y, fill = total_value), color = "white") +
+  scale_fill_gradient(low = input$low_f_col, high = input$high_f_col, na.value = "white", breaks = c(min(ipa_grid_Manner$total_value), 
+          max(ipa_grid_Manner$total_value)), labels=c("Least \nfrequent","Most \nfrequent"))+
+  geom_text(data = ipa_grid_Manner %>% filter(Symbol %in% cons_selected),
+            aes(x = x, y = y, label = Symbol, hjust = hjust), 
+            size = 5) +
+  theme_minimal() +
+  labs(title = "...as a function of manner of articulation",
+       x = "", y = "", fill = "Frequency\n\n") +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),  # Remove x-axis title
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "gray"),
+        axis.text.x = element_text(size = 10, angle = 45, vjust = 1, hjust = 1),  # Size of x-axis tick labels
+        axis.text.y = element_text(size = 10, angle = 0)) +
+  theme(text = element_text(family = "Geneva"))  # Size of y-axis tick labels
+
+plot_Manner
+
+cons_plot <- plot_Manner +  plot_annotation(
+    title = paste('Consonant system of', ID_syst),
+    theme = theme(
+      plot.title = element_text(size = 18),
+      plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
+    ),
+    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+  )
+cons_plot
+})
+```
+
+## Row
+
+### Voicing
+
+```{r}
+renderPlot({
+  # 1. Get the values for each Symbol from the input
+  Symbol_cons <- sapply(ipa_consonant_symbols$Symbol, function(Symbol) input[[Symbol]])
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+#ipa_grid$value <- sample(c(rep(1, (num_ones <- sample(2:3, 1))), rep(0, 57 - num_ones)))
+# Update values based on the input
+if (input$Log_scale == F)
+  {ipa_grid$value <- Symbol_cons}
+  else{ipa_grid$value <-  log(Symbol_cons + 1e-6)}
+
+cons_selected <- ipa_grid$Symbol[ipa_grid$value>1e-6]
+# Filter by selected conss and summarize the data
+# Initialize the filtered data frame as the original data frame
+filtered_ipa_grid <- ipa_grid
+
+# Apply filters if they are not set to "No filter"
+if (input$consonant_place_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Place == input$consonant_place_filter)
+}
+
+if (input$consonant_manner_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Manner == input$consonant_manner_filter)
+}
+
+if (input$consonant_voicing_filter != "No filter") {
+  filtered_ipa_grid <- filtered_ipa_grid %>%
+    filter(Voicing == input$consonant_voicing_filter)
+}
+
+# Group by Place and Manner, then calculate the total value for each group
+ipa_grid<- filtered_ipa_grid %>%
+  group_by(Place, Manner) %>%
+  mutate(total_value = sum(value))
+
+if (exists("cons_selected") && length(cons_selected) > 0) {
+summary_voicing <- ipa_grid %>%
+  filter(Symbol %in% cons_selected) %>%
+  group_by(Voicing) %>%
+  summarise(total_value = sum(value))  # Sum the values for each Voicing category
+
+# Calculate proportions
+total_sum <- sum(summary_voicing$total_value)  # Total sum of all values
+summary_voicing <- summary_voicing %>%
+  group_by(Voicing) %>%
+  mutate(proportion = total_value / total_sum)  # Change level names
+
+# Create the basic plot
+voicing_plot <- ggplot(summary_voicing, aes(x = "", y = proportion, fill = Voicing)) + 
+  geom_col(position = "fill") +  # Create a stacked bar plot with proportional heights
+  geom_text(
+    aes(label = paste0(Voicing, " ", scales::percent(proportion))), 
+    position = position_fill(vjust = 0.5),  # Center text vertically in each bar
+    color = "white", size = 5  # Adjust text color and size
+  ) +
+  labs(title = "...as a function of voicing")+
+  scale_fill_manual(values = c("Voiced" = input$high_f_col, "Voiceless" = input$low_f_col)) +  # Set custom colors
+  scale_size_continuous(range = c(3, 6)) +  # Adjust the range of text size based on proportion
+  theme_minimal() +  # Apply a minimal theme
+  theme(
+    legend.position = "none",  # Remove the legend
+    axis.text = element_blank(),  # Remove axis text
+    axis.title = element_blank(),  # Remove axis titles
+    axis.ticks = element_blank(),  # Remove axis ticks
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  ) +
+  coord_flip()  
+
+voicing_plot
+
+
+cons_plot <- voicing_plot +  plot_annotation(
+    title = paste('Consonant system of', ID_syst),
+    theme = theme(
+      plot.title = element_text(size = 18),
+      plot.caption = element_text(hjust = 0.5)),
+    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data))
+cons_plot
+}else {
+ plot.new()
+} 
+
+})
+
+```
+
+# Non-Pulmonic Consonants
+
+## Sidebar {.sidebar}
+```{r}
+
+selectInput(inputId = "consonant_other_place_filter", label = "Filter by consonant place of articulation:",
+            choices = c("Bilabial",  "Dental", "Dental-Alveolar", "Alveolar", "Alveolar Fricative", "Alveolar-Lateral", "(Post)alveolar", "Palato-Alveolar","Palatal",  "Velar", "Uvular", "No filter"),
+            selected = "No filter")
+
+selectInput(inputId = "consonant_other_manner_filter", label = "Filter by consonant manner of articulation:",
+            choices = c("Click", "Implosive", "Ejective", "No filter"),
+            selected = "No filter")
+```
+
+## Row {.tabset .tabset-fade}
+
+### General chart
+
+```{r}
+renderPlot({
+  # 1. Get the values for each Symbol from the input
+  Symbol_other <- sapply(ipa_consonant_other_symbols$Symbol, function(Symbol) input[[Symbol]])
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+#ipa_grid_other$value <- sample(c(rep(1, (num_ones <- sample(2:3, 1))), rep(0, 14 - num_ones)))
+# Update values based on the input
+
+ipa_grid_other$value <- Symbol_other
+
+
+cons_selected <- ipa_grid_other$Symbol[ipa_grid_other$value>1e-6]
+
+
+if (input$consonant_other_place_filter == "No filter" &
+    input$consonant_other_manner_filter == "No filter") {
+  ipa_grid_other_detail <- ipa_grid_other %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else if (input$consonant_other_place_filter != "No filter" &
+           input$consonant_other_manner_filter == "No filter") {
+  ipa_grid_other_detail <- ipa_grid_other %>%
+    filter(Place == input$consonant_other_place_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else if (input$consonant_other_place_filter == "No filter" &
+           input$consonant_other_manner_filter != "No filter") {
+  ipa_grid_other_detail <- ipa_grid_other %>%
+    filter(Manner == input$consonant_other_manner_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else {
+  ipa_grid_other_detail <- ipa_grid_other %>%
+    filter(Place == input$consonant_other_place_filter, 
+           Manner == input$consonant_other_manner_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+}
+
+if (input$Log_scale == F)
+{
+ipa_grid_other_detail<- ipa_grid_other_detail %>%
+  group_by(Place, Manner) %>%
+  mutate(total_value = sum(value))
+}
+  else{
+  ipa_grid_other_detail<- ipa_grid_other_detail %>%
+  group_by(Place, Manner) %>%
+  mutate(total_value = log(sum(value)+1e-6))}
+
+plot_detail <- ggplot(data = ipa_grid_other_detail) +
+  geom_tile(aes(x = x, y = y, fill = total_value), color = "white") +
+  scale_fill_gradient(low = input$low_f_col, high = input$high_f_col, na.value = "white", breaks = c(min(ipa_grid_other_detail$total_value),
+          max(ipa_grid_other_detail$total_value)), labels=c("Least \nfrequent","Most \nfrequent"))+
+  geom_text(data = ipa_grid_other_detail %>% filter(Symbol %in% cons_selected),
+            aes(x = x, y = y, label = Symbol), 
+            size = 5, family = "Geneva") +
+  theme_minimal() +
+  labs(y = "", fill = "Frequency\n\n") +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),  # Remove x-axis title
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "gray"),
+        axis.text.x = element_text(size = 10, angle = 45, vjust = 1, hjust = 1),  # Size of x-axis tick labels
+        axis.text.y = element_text(size = 10, angle = 0)) +
+  theme(text = element_text(family = "Geneva"))  # Size of y-axis tick labels
+
+plot_detail
+
+
+cons_plot <- plot_detail +  plot_annotation(
+    title = paste('Consonant system of', ID_syst),
+    theme = theme(
+      plot.title = element_text(size = 18),
+      plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
+    ),
+    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+  )
+cons_plot
+
+})  
+```
+
+## Row {.tabset .tabset-fade}
+
+### Place
+
+```{r}
+renderPlot({
+  # 1. Get the values for each Symbol from the input
+  Symbol_other <- sapply(ipa_consonant_other_symbols$Symbol, function(Symbol) input[[Symbol]])
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+#ipa_grid_other$value <- sample(c(rep(1, (num_ones <- sample(2:3, 1))), rep(0, 57 - num_ones)))
+# Update values based on the input
+ipa_grid_other$value <- Symbol_other
+
+cons_selected <- ipa_grid_other$Symbol[ipa_grid_other$value>1e-6]
+# Filter by selected conss and summarize the data
+ipa_grid_other_place <- ipa_grid_other %>%
+  group_by(Place) %>%
+  mutate(total_value = sum(value))
+
+if (input$consonant_other_place_filter == "No filter" &
+    input$consonant_other_manner_filter == "No filter") {
+  ipa_grid_other_place <- ipa_grid_other %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else if (input$consonant_other_place_filter != "No filter" &
+           input$consonant_other_manner_filter == "No filter") {
+  ipa_grid_other_place <- ipa_grid_other %>%
+    filter(Place == input$consonant_other_place_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else if (input$consonant_other_place_filter == "No filter" &
+           input$consonant_other_manner_filter != "No filter") {
+  ipa_grid_other_place <- ipa_grid_other %>%
+    filter(Manner == input$consonant_other_manner_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else {
+  ipa_grid_other_place <- ipa_grid_other %>%
+    filter(Place == input$consonant_other_place_filter, 
+           Manner == input$consonant_other_manner_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+}
+
+if (input$Log_scale == F)
+{
+ipa_grid_other_place<- ipa_grid_other_place %>%
+  group_by(Place) %>%
+  mutate(total_value = sum(value))
+}
+  else{
+  ipa_grid_other_place<- ipa_grid_other_place %>%
+  group_by(Place) %>%
+  mutate(total_value = log(sum(value)+1e-6))}
+
+plot_place <- ggplot(data = ipa_grid_other_place) +
+  geom_tile(aes(x = x, y = y, fill = total_value), color = "white") +
+  scale_fill_gradient(low = input$low_f_col, high = input$high_f_col, na.value = "white", breaks = c(min(ipa_grid_other_place$total_value), 
+          max(ipa_grid_other_place$total_value)), labels=c("Least \nfrequent","Most \nfrequent"))+
+  geom_text(data = ipa_grid_other_place %>% filter(Symbol %in% cons_selected),
+            aes(x = x, y = y, label = Symbol), 
+            size = 5) +
+  theme_minimal() +
+  labs(title = "...as a function of place of articulation",
+       x = "", y = "", fill = "Frequency\n\n") +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),  # Remove x-axis title
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "gray"),
+        axis.text.x = element_text(size = 10, angle = 45, vjust = 1, hjust = 1),  # Size of x-axis tick labels
+        axis.text.y = element_text(size = 10, angle = 0))  # Size of y-axis tick labels
+
+
+plot_place
+
+cons_plot <- plot_place +  plot_annotation(
+    title = paste('Consonant system of', ID_syst),
+    theme = theme(
+      plot.title = element_text(size = 18),
+      plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
+    ),
+    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+  )
+cons_plot
+
+})  
+```
+
+### Manner
+
+```{r}
+renderPlot({
+  # 1. Get the values for each Symbol from the input
+  Symbol_other <- sapply(ipa_consonant_other_symbols$Symbol, function(Symbol) input[[Symbol]])
+  ID_syst <- input$ID_syst
+  ID_data <- input$ID_data
+  
+#ipa_grid_other$value <- sample(c(rep(1, (num_ones <- sample(2:3, 1))), rep(0, 57 - num_ones)))
+# Update values based on the input
+
+ipa_grid_other$value <- Symbol_other
+
+cons_selected <- ipa_grid_other$Symbol[ipa_grid_other$value>1e-6]
+# Filter by selected conss and summarize the data
+ipa_grid_other_Manner <- ipa_grid_other %>%
+#filter(Symbol %in% cons_selected) %>%
+  group_by(Manner) %>%
+  mutate(total_value = sum(value))
+
+if (input$consonant_other_place_filter == "No filter" &
+    input$consonant_other_manner_filter == "No filter") {
+  ipa_grid_other_Manner <- ipa_grid_other %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else if (input$consonant_other_place_filter != "No filter" &
+           input$consonant_other_manner_filter == "No filter") {
+  ipa_grid_other_Manner <- ipa_grid_other %>%
+    filter(Place == input$consonant_other_place_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else if (input$consonant_other_place_filter == "No filter" &
+           input$consonant_other_manner_filter != "No filter") {
+  ipa_grid_other_Manner <- ipa_grid_other %>%
+    filter(Manner == input$consonant_other_manner_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+} else {
+  ipa_grid_other_Manner <- ipa_grid_other %>%
+    filter(Place == input$consonant_other_place_filter, 
+           Manner == input$consonant_other_manner_filter) %>%
+    group_by(Place, Manner) %>%
+    mutate(total_value = sum(value))
+}
+
+
+if (input$Log_scale == F)
+{
+ipa_grid_other_Manner<- ipa_grid_other_Manner %>%
+  group_by(Manner) %>%
+  mutate(total_value = sum(value))
+}
+  else{
+  ipa_grid_other_Manner<- ipa_grid_other_Manner %>%
+  group_by(Manner) %>%
+  mutate(total_value = log(sum(value)+1e-6))}
+
+plot_Manner <- ggplot(data = ipa_grid_other_Manner) +
+  geom_tile(aes(x = x, y = y, fill = total_value), color = "white") +
+  scale_fill_gradient(low = input$low_f_col, high = input$high_f_col, na.value = "white", breaks = c(min(ipa_grid_other_Manner$total_value), 
+          max(ipa_grid_other_Manner$total_value)), labels=c("Least \nfrequent","Most \nfrequent"))+
+  geom_text(data = ipa_grid_other_Manner %>% filter(Symbol %in% cons_selected),
+            aes(x = x, y = y, label = Symbol), 
+            size = 5) +
+  theme_minimal() +
+  labs(title = "...as a function of manner of articulation",
+       x = "", y = "", fill = "Frequency\n\n") +
+  theme(legend.position = "bottom",
+        axis.title.x = element_blank(),  # Remove x-axis title
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "gray"),
+        axis.text.x = element_text(size = 10, angle = 45, vjust = 1, hjust = 1),  # Size of x-axis tick labels
+        axis.text.y = element_text(size = 10, angle = 0))  # Size of y-axis tick labels
+
+plot_Manner
+
+cons_plot <- plot_Manner +  plot_annotation(
+    title = paste('Consonant system of', ID_syst),
+    theme = theme(
+      plot.title = element_text(size = 18),
+      plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
+    ),
+    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+  )
+cons_plot
+})
+```
