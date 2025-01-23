@@ -246,7 +246,9 @@ for (manner in consonant_other_types) {
 
 ### Welcome to **ColouringTheIllustration** 🎨
 <div style="height: 200px; overflow-y: scroll;"> 
-Traditional phonological documentation often relies on (adapted versions of) the **IPA** chart, which offers a static, one-dimensional view of phonological systems without highlighting the **relative frequency of phonemes**. At the same time, the growing availability of phonologically transcribed spoken corpora provides valuable data on these frequencies. However, until now, there hasn't been an easy way to visualize frequency information on the IPA chart.
+The traditional documentation of phonological systems often relies on (adapted versions of) the **IPA**. However, such representation does not present information as to whether one speech sound is much more frequent than another one. This type of information might be signalled by brackets, but this gives very little information as to the **relative frequency of phonemes**. 
+
+At the same time, the growing availability of phonologically transcribed spoken corpora provides valuable data on these frequencies. Yet, there is currently no easy way to visualize frequency information on the IPA chart.
 
 **ColouringTheIllustration** bridges this gap by allowing users to enhance phonological system documentation through **interactive data visualizations**. With this app, you can visualize phoneme frequencies from any corpus that represents a phonological system. Simply input the counts of each observed phoneme, and watch as the app transforms your data into insightful visual representations.
 </div> 
@@ -257,7 +259,7 @@ Traditional phonological documentation often relies on (adapted versions of) the
 
 1. Enter the **counts** or **frequencies** for each phoneme using the options below ⬇️<sup>1</sup>  
 2. Customize the appearance by selecting **design options** in the last tab 🧑‍🎨  
-3. View the **visuals** by choosing one of the green tabs above ⬆️<sup>2</sup>  
+3. View the **visuals** by choosing one of the blue tabs above ⬆️<sup>2</sup>  
 4. Use the **filter** options available in each tab to refine your visualization ☑️  
 5. To save or copy your visuals, simply right-click and select the appropriate option 💾  
 
@@ -274,7 +276,7 @@ The code is also publicly available on GitHub [here](https://github.com/jgenette
 Improving **ColouringTheIllustration** requires time. If you use it for publications, consider citing it.
 
 You can refer to it as:
-Genette, J., Gillis, S., & Verhoeven, J. (2024). Colouring the Illustration v.1.0. [Software]. *Zenodo*. https://doi.org/10.5281/zenodo.10228174
+Genette, J. (2024). Colouring the illustration v.1.0. [Software]. https://jgenette.shinyapps.io/colouringtheillustrationapp/
 
 ### Bug Reports and Feedback 🫤
 
