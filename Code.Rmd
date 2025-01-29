@@ -246,11 +246,11 @@ for (manner in consonant_other_types) {
 
 ### Welcome to **ColouringTheIllustration** 🎨
 <div style="height: 200px; overflow-y: scroll;"> 
-The traditional documentation of phonological systems often relies on (adapted versions of) the **IPA**. However, such representation does not present information as to whether one speech sound is much more frequent than another one. This type of information might be signalled by brackets, but this gives very little information as to the **relative frequency of phonemes**. 
+The traditional documentation of phonological systems often relies on (adapted versions of) the **IPA**. However, such representation does not present information as to whether one speech sound is much more frequent than another one. This type of information might be signalled by brackets, but this gives very little information as to the **relative frequency** of the different speech sounds. 
 
-At the same time, the growing availability of phonologically transcribed spoken corpora provides valuable data on these frequencies. Yet, there is currently no easy way to visualize frequency information on the IPA chart.
+At the same time, the growing availability of phonetically transcribed spoken corpora provides valuable data on these frequencies. Yet, there is currently no easy way to visualize frequency information on the IPA chart.
 
-**ColouringTheIllustration** bridges this gap by allowing users to enhance phonological system documentation through **interactive data visualizations**. With this app, you can visualize phoneme frequencies from any corpus that represents a phonological system. Simply input the counts of each observed phoneme, and watch as the app transforms your data into insightful visual representations.
+**ColouringTheIllustration** bridges this gap by allowing users to enhance phonological system documentation through **interactive data visualizations**. Simply insert the counts of each observed phoneme in your data, and watch as the app transforms your data into insightful visual representations.
 </div> 
 
 ### How to use the app 📏
@@ -435,7 +435,7 @@ consonant_other_symbols <- if (consonant_other_type == "Select an option"){
 
 # Input fields for sidebar
 textInput(inputId = "ID_syst", label = "Phonological system:", value = "French")
-textInput(inputId = "ID_data", label = "Data source:", value = "JIPA")
+textInput(inputId = "ID_data", label = "Data source:", value = "Reference")
 
 checkboxInput(inputId = "Log_scale", label = "Logarithmic scale", value = FALSE, width = NULL)
 
@@ -665,7 +665,7 @@ combined_plot <-combined_plot +
   plot_annotation(
     title = paste('Vowel system of', ID_syst),
     theme = theme(plot.title = element_text(size = 18)),
-    caption = paste("© A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+    caption = paste("© A vizualization by Genette (2024) \nData retrieved from", ID_data)
   ) 
 combined_plot
 }else {
@@ -774,7 +774,7 @@ cons_plot <- plot_detail +  plot_annotation(
       plot.title = element_text(size = 18),
       plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
     ),
-    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from"
+    caption = paste("A vizualization by Genette (2024) \nData retrieved from"
                     ,ID_data
                     )
   )
@@ -861,7 +861,7 @@ cons_plot <- plot_place +  plot_annotation(
       plot.title = element_text(size = 18),
       plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
     ),
-    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+    caption = paste("A vizualization by Genette (2024) \nData retrieved from", ID_data)
   )
 cons_plot
 
@@ -945,7 +945,7 @@ cons_plot <- plot_Manner +  plot_annotation(
       plot.title = element_text(size = 18),
       plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
     ),
-    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+    caption = paste("A vizualization by Genette (2024) \nData retrieved from", ID_data)
   )
 cons_plot
 })
@@ -1036,7 +1036,7 @@ cons_plot <- voicing_plot +  plot_annotation(
     theme = theme(
       plot.title = element_text(size = 18),
       plot.caption = element_text(hjust = 0.5)),
-    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data))
+    caption = paste("A vizualization by Genette (2024) \nData retrieved from", ID_data))
 cons_plot
 }else {
  plot.new()
@@ -1143,7 +1143,7 @@ cons_plot <- plot_detail +  plot_annotation(
       plot.title = element_text(size = 18),
       plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
     ),
-    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+    caption = paste("A vizualization by Genette (2024) \nData retrieved from", ID_data)
   )
 cons_plot
 
@@ -1234,7 +1234,7 @@ cons_plot <- plot_place +  plot_annotation(
       plot.title = element_text(size = 18),
       plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
     ),
-    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+    caption = paste("A vizualization by Genette (2024) \nData retrieved from", ID_data)
   )
 cons_plot
 
@@ -1325,7 +1325,7 @@ cons_plot <- plot_Manner +  plot_annotation(
       plot.title = element_text(size = 18),
       plot.caption = element_text(hjust = 0.5)  # Optional: Center the caption
     ),
-    caption = paste("A vizualization by Genette et al. (2024) \nData retrieved from", ID_data)
+    caption = paste("A vizualization by Genette (2024) \nData retrieved from", ID_data)
   )
 cons_plot
 })
